@@ -9,11 +9,7 @@ Biblioteca Python para **captura de tela**, **seleção de área com o mouse**
 cross-platform.
 
 > [!CAUTION]
-> Este projeto utiliza IA como apoio no desenvolvimento. Código gerado ou
-> sugerido por IA **deve sempre ser revisado e testado** antes de virar
-> commit/release — a IA pode propor código incorreto, inseguro ou fora dos
-> padrões do projeto. **Nunca** cole segredos, chaves de API ou dados
-> sensíveis em ferramentas de IA.
+> Este projeto utilizou IA como apoio no desenvolvimento.
 
 ## Instalação
 
