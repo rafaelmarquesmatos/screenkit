@@ -54,6 +54,7 @@ def capture_and_save(
     *,
     silent: bool = False,
     monitor: int = 0,
+    auto_confirm: bool = False,
     directory: str | Path | None = None,
     fmt: str | None = None,
     quality: int = 95,
@@ -66,6 +67,8 @@ def capture_and_save(
         silent: Se ``True``, captura a tela inteira sem abrir o overlay
             (modo silencioso, para automação).
         monitor: Monitor no estilo ``mss`` (``0`` = todos, ``1`` = primário).
+        auto_confirm: Se ``True``, a seleção é confirmada automaticamente
+            ao soltar o mouse (sem ``Enter``).
         directory: Pasta de destino (padrão: ``~/Pictures``).
         fmt: Formato de saída (``png``, ``jpg`` ou ``webp``; padrão ``png``).
         quality: Qualidade de 1 a 100 para ``jpg``/``webp``.
@@ -87,7 +90,7 @@ def capture_and_save(
     elif silent:
         image = capture_full(monitor)
     else:
-        selected = select_region(monitor=monitor)
+        selected = select_region(monitor=monitor, auto_confirm=auto_confirm)
         if selected is None:
             return None
         image = capture_region(selected)

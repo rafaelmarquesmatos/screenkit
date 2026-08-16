@@ -1,0 +1,116 @@
+"""App de teste do screenkit — exercita captura, seleção e salvamento.
+
+Uso::
+
+    python examples/test_app.py
+"""
+from __future__ import annotations
+
+import sys
+
+from PySide6 import QtCore, QtGui, QtWidgets
+
+import screenkit
+
+
+def _to_qpixmap(image) -> QtGui.QPixmap:
+    """Converte uma ``PIL.Image`` RGB em ``QPixmap`` (sem arquivos temporários)."""
+    data = image.tobytes("raw", "RGB")
+    qimage = QtGui.QImage(
+        data,
+        image.width,
+        image.height,
+        image.width * 3,
+        QtGui.QImage.Format.Format_RGB888,
+    )
+    return QtGui.QPixmap.fromImage(qimage.copy())
+
+
+class MainWindow(QtWidgets.QMainWindow):
+    def __init__(self) -> None:
+        super().__init__()
+        self.setWindowTitle("ScreenKit — App de teste")
+        self.resize(720, 560)
+
+        self._preview = QtWidgets.QLabel("Nenhuma captura ainda.")
+        self._preview.setAlignment(QtCore.Qt.AlignmentFlag.AlignCenter)
+        self._preview.setMinimumHeight(320)
+        self._preview.setFrameStyle(QtWidgets.QFrame.Shape.StyledPanel)
+
+        central = QtWidgets.QWidget()
+        layout = QtWidgets.QVBoxLayout(central)
+
+        buttons = QtWidgets.QGridLayout()
+        actions = [
+            ("Selecionar região (Enter)", self._select_region),
+            ("Selecionar região (auto)", self._select_region_auto),
+            ("Capturar tela cheia", self._capture_full),
+            ("Capturar e salvar", self._capture_and_save),
+        ]
+        for row, (text, handler) in enumerate(actions):
+            button = QtWidgets.QPushButton(text)
+            button.clicked.connect(handler)
+            buttons.addWidget(button, row // 2, row % 2)
+        layout.addLayout(buttons)
+        layout.addWidget(self._preview, stretch=1)
+
+        self.setCentralWidget(central)
+        self.statusBar().showMessage("Pronto.")
+
+    # ------------------------------------------------------------------
+    # Ações
+    # ------------------------------------------------------------------
+
+    def _select_region(self) -> None:
+        self._handle_region(screenkit.select_region())
+
+    def _select_region_auto(self) -> None:
+        self._handle_region(screenkit.select_region(auto_confirm=True))
+
+    def _capture_full(self) -> None:
+        self.statusBar().showMessage("Capturando tela cheia...")
+        image = screenkit.capture_full()
+        self._show_image(image)
+        self.statusBar().showMessage(f"Tela cheia: {image.width} × {image.height}")
+
+    def _capture_and_save(self) -> None:
+        path = screenkit.capture_and_save(auto_confirm=True)
+        self.statusBar().showMessage(
+            f"Salvo em {path}" if path else "Captura cancelada."
+        )
+
+    # ------------------------------------------------------------------
+    # Helpers
+    # ------------------------------------------------------------------
+
+    def _handle_region(self, region: screenkit.Region | None) -> None:
+        if region is None:
+            self.statusBar().showMessage("Seleção cancelada.")
+            return
+        image = screenkit.capture_region(region)
+        self._show_image(image)
+        self.statusBar().showMessage(
+            f"Região: {region.width} × {region.height} "
+            f"em ({region.left}, {region.top})"
+        )
+
+    def _show_image(self, image) -> None:
+        pixmap = _to_qpixmap(image)
+        self._preview.setPixmap(
+            pixmap.scaled(
+                self._preview.size(),
+                QtCore.Qt.AspectRatioMode.KeepAspectRatio,
+                QtCore.Qt.TransformationMode.SmoothTransformation,
+            )
+        )
+
+
+def main() -> int:
+    app = QtWidgets.QApplication(sys.argv)
+    window = MainWindow()
+    window.show()
+    return app.exec()
+
+
+if __name__ == "__main__":
+    sys.exit(main())

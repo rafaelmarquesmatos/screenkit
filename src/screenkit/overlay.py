@@ -16,8 +16,10 @@ logger = get_logger(__name__)
 class RegionOverlay(QtWidgets.QDialog):
     """Diálogo de tela cheia para selecionar uma região arrastando o mouse.
 
-    Mostra a tela esmaecida (dim), desenha o retângulo da seleção com borda
-    e dimensões em tempo real. ``Enter`` confirma e ``Esc`` cancela.
+    Mostra a captura da tela como fundo (esmaecida fora da seleção), desenha
+    o retângulo da seleção com borda e dimensões em tempo real. ``Enter``
+    confirma e ``Esc`` cancela — a menos que ``auto_confirm`` seja ``True``,
+    caso em que soltar o botão do mouse já confirma.
 
     Também pode ser usada de forma não bloqueante (``show()``) em aplicações
     Qt existentes — veja :func:`start_region_selection`.
@@ -32,7 +34,11 @@ class RegionOverlay(QtWidgets.QDialog):
     BORDER_COLOR = QtGui.QColor("#4FC3F7")
     DIM_COLOR = QtGui.QColor(0, 0, 0, 110)
 
-    def __init__(self, screen: QtGui.QScreen | None = None) -> None:
+    def __init__(
+        self,
+        screen: QtGui.QScreen | None = None,
+        auto_confirm: bool = False,
+    ) -> None:
         super().__init__(None)
         flags = (
             QtCore.Qt.WindowType.FramelessWindowHint
@@ -46,9 +52,40 @@ class RegionOverlay(QtWidgets.QDialog):
 
         self._screen = screen or QtGui.QGuiApplication.primaryScreen()
         self.setGeometry(self._screen.geometry())
+        self._auto_confirm = auto_confirm
+        self._background = self._grab_background()
         self._start: QtCore.QPoint | None = None
         self._end: QtCore.QPoint | None = None
         self._pressed = False
+
+    # ------------------------------------------------------------------
+    # Fundo (captura da tela)
+    # ------------------------------------------------------------------
+
+    def _grab_background(self) -> QtGui.QPixmap:
+        """Captura a tela atual (via ``mss``) para usar como fundo do overlay."""
+        try:
+            import mss
+
+            with mss.MSS() as sct:
+                index = QtGui.QGuiApplication.screens().index(self._screen)
+                mss_index = max(1, index + 1)
+                if mss_index >= len(sct.monitors):
+                    mss_index = 1
+                shot = sct.grab(sct.monitors[mss_index])
+            image = QtGui.QImage(
+                shot.rgb,
+                shot.width,
+                shot.height,
+                shot.width * 3,
+                QtGui.QImage.Format.Format_RGB888,
+            )
+            pixmap = QtGui.QPixmap.fromImage(image.copy())
+            pixmap.setDevicePixelRatio(self._screen.devicePixelRatio())
+            return pixmap
+        except Exception:
+            logger.exception("Falha ao capturar o fundo do overlay")
+            return QtGui.QPixmap()
 
     # ------------------------------------------------------------------
     # Seleção
@@ -104,6 +141,9 @@ class RegionOverlay(QtWidgets.QDialog):
             self._end = event.position().toPoint()
             self._pressed = False
             self.update()
+            if self._auto_confirm and self.selected_region is not None:
+                logger.debug("Seleção confirmada automaticamente: %s", self.selected_region)
+                self.accept()
         else:
             super().mouseReleaseEvent(event)
 
@@ -131,16 +171,18 @@ class RegionOverlay(QtWidgets.QDialog):
         painter = QtGui.QPainter(self)
         painter.setRenderHint(QtGui.QPainter.RenderHint.Antialiasing)
 
-        painter.fillRect(self.rect(), self.DIM_COLOR)
+        if self._background.isNull():
+            painter.fillRect(self.rect(), self.DIM_COLOR)
+        else:
+            painter.drawPixmap(self.rect(), self._background)
+
         rect = self._current_rect()
         if rect is not None and not rect.isEmpty():
-            painter.setCompositionMode(
-                QtGui.QPainter.CompositionMode.CompositionMode_Clear
-            )
-            painter.fillRect(rect, QtCore.Qt.GlobalColor.transparent)
-            painter.setCompositionMode(
-                QtGui.QPainter.CompositionMode.CompositionMode_SourceOver
-            )
+            path = QtGui.QPainterPath()
+            path.setFillRule(QtCore.Qt.FillRule.OddEvenFill)
+            path.addRect(self.rect())
+            path.addRect(rect)
+            painter.fillPath(path, self.DIM_COLOR)
 
             painter.setPen(QtGui.QPen(self.BORDER_COLOR, 2))
             painter.drawRect(rect)
@@ -154,8 +196,14 @@ class RegionOverlay(QtWidgets.QDialog):
                 | QtCore.Qt.AlignmentFlag.AlignLeft,
                 label,
             )
+        else:
+            painter.fillRect(self.rect(), self.DIM_COLOR)
 
-        hint = "Arraste para selecionar — Enter confirma, Esc cancela"
+        hint = (
+            "Arraste para selecionar — Esc cancela"
+            if self._auto_confirm
+            else "Arraste para selecionar — Enter confirma, Esc cancela"
+        )
         painter.setPen(QtGui.QColor(255, 255, 255, 200))
         painter.drawText(
             self.rect().adjusted(0, 0, 0, -24),
@@ -184,7 +232,9 @@ def _ensure_application() -> tuple[QtWidgets.QApplication, bool]:
     return app, False
 
 
-def select_region(silent: bool = False, monitor: int = 0) -> Region | None:
+def select_region(
+    silent: bool = False, monitor: int = 0, auto_confirm: bool = False
+) -> Region | None:
     """Abre o overlay de seleção de área e retorna a região escolhida.
 
     Args:
@@ -192,6 +242,8 @@ def select_region(silent: bool = False, monitor: int = 0) -> Region | None:
             imediatamente (útil em automação/ambientes sem interação).
         monitor: Monitor no estilo ``mss``: ``0`` ou ``1`` = primário,
             ``2`` = segundo monitor, etc.
+        auto_confirm: Se ``True``, a seleção é confirmada automaticamente
+            ao soltar o botão do mouse (sem precisar de ``Enter``).
 
     Returns:
         ``Region`` em pixels físicos, ou ``None`` se cancelada
@@ -213,7 +265,7 @@ def select_region(silent: bool = False, monitor: int = 0) -> Region | None:
         return None
 
     app, owns_app = _ensure_application()
-    overlay = RegionOverlay(_pick_screen(monitor))
+    overlay = RegionOverlay(_pick_screen(monitor), auto_confirm=auto_confirm)
     result = overlay.exec()
     region = (
         overlay.selected_region
@@ -230,7 +282,9 @@ def select_region(silent: bool = False, monitor: int = 0) -> Region | None:
 
 
 def start_region_selection(
-    callback: Callable[[Region | None], Any], monitor: int = 0
+    callback: Callable[[Region | None], Any],
+    monitor: int = 0,
+    auto_confirm: bool = False,
 ) -> RegionOverlay:
     """Versão não bloqueante de :func:`select_region` para apps Qt existentes.
 
@@ -241,6 +295,7 @@ def start_region_selection(
     Args:
         callback: Função chamada com ``Region | None`` ao finalizar.
         monitor: Monitor no estilo ``mss`` (1 = primário).
+        auto_confirm: Se ``True``, confirma a seleção ao soltar o mouse.
 
     Returns:
         O overlay exibido (mantenha a referência viva).
@@ -252,7 +307,7 @@ def start_region_selection(
         >>> overlay = start_region_selection(on_done)  # não bloqueia
     """
     _, owns_app = _ensure_application()
-    overlay = RegionOverlay(_pick_screen(monitor))
+    overlay = RegionOverlay(_pick_screen(monitor), auto_confirm=auto_confirm)
 
     def _on_finished(result: int) -> None:
         region = (
