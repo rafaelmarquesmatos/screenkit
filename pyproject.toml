@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "screenkit"
-version = "0.1.0"
+version = "0.2.0"
 description = "Biblioteca Python para captura de tela, seleção de região com o mouse e salvamento de imagens."
 readme = "README.md"
 requires-python = ">=3.11"
