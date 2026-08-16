@@ -36,9 +36,10 @@ img = screenkit.capture_window("Notepad", exact=False)
 screenkit.save(img)                       # ~/Pictures/screen_2026-08-15_14-30-05.png
 screenkit.save(img, directory="docs", fmt="jpg", quality=85)
 
-region = screenkit.select_region()           # overlay: arraste, Enter confirma, Esc cancela
+region = screenkit.select_region()             # overlay em todos os monitores
+region = screenkit.select_region(monitor=1)    # só o monitor primário
 region = screenkit.select_region(auto_confirm=True)  # confirma ao soltar o mouse
-path = screenkit.capture_and_save()          # seleciona, captura e salva num passo
+path = screenkit.capture_and_save()            # seleciona, captura e salva num passo
 ```
 
 ## API pública
@@ -48,7 +49,7 @@ path = screenkit.capture_and_save()          # seleciona, captura e salva num pa
 | `capture_full(monitor=0)` | Tela inteira; `0` = todos os monitores, `1` = primário, `2+` = demais | `PIL.Image` |
 | `capture_region(region)` | Região como `Region` ou `(left, top, width, height)` | `PIL.Image` |
 | `capture_window(title, exact=True)` | Janela por título (Windows: Win32; Linux: X11 via `xdotool`) | `PIL.Image` |
-| `select_region(silent=False, monitor=0, auto_confirm=False)` | Overlay de seleção com o mouse; `auto_confirm=True` confirma ao soltar o mouse | `Region \| None` |
+| `select_region(silent=False, monitor=0, auto_confirm=False)` | Overlay de seleção; `monitor=0` = todos os monitores, `1` = primário, `2+` = demais; `auto_confirm=True` confirma ao soltar o mouse | `Region \| None` |
 | `capture_and_save(...)` | Seleção + captura + salvamento em um passo | `Path \| None` |
 | `save(image, *, path, directory, fmt, quality, prefix)` | Salva em PNG/JPG/WebP com nome automático | `Path` |
 | `build_filename(fmt, prefix)` | Gera `screen_2026-08-15_14-30-05.png` | `str` |
